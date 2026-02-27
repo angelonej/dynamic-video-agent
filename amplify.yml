@@ -3,13 +3,12 @@ frontend:
   phases:
     build:
       commands:
-        - echo "No build step required — static HTML/CSS/JS"
+        - cp frontend/sf-realestate.html frontend/index.html
   artifacts:
     baseDirectory: frontend
     files:
-      - sf-realestate.html
+      - index.html
       - style.css
       - app.js
-      - index.html
   cache:
     paths: []
