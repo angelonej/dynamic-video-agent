@@ -1,0 +1,15 @@
+version: 1
+frontend:
+  phases:
+    build:
+      commands:
+        - echo "No build step required — static HTML/CSS/JS"
+  artifacts:
+    baseDirectory: frontend
+    files:
+      - sf-realestate.html
+      - style.css
+      - app.js
+      - index.html
+  cache:
+    paths: []

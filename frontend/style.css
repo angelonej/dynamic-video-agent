@@ -1,0 +1,191 @@
+/*
+ * style.css — Custom styles for Dynamic Video AI Agent Platform
+ * =============================================================
+ * Complements Tailwind CDN. Covers animations, scrollbars, and
+ * elements that Tailwind's JIT can't easily handle inline.
+ */
+
+/* ── Base resets ────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Custom scrollbar (dark theme) ─────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #13162a;
+}
+::-webkit-scrollbar-thumb {
+  background: #2d3556;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3b4470;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2d3556 #13162a;
+}
+
+/* ── Modal entrance animation ───────────────────────────────────────────── */
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ── Message row slide-in ───────────────────────────────────────────────── */
+
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-row {
+  animation: msg-in 0.2s ease-out forwards;
+}
+
+/* ── Pulsing recording ring on mic button ───────────────────────────────── */
+
+@keyframes record-ring {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+}
+
+#btn-mic.recording-active {
+  animation: record-ring 1.2s ease-in-out infinite;
+}
+
+/* ── Video container aspect ratio ───────────────────────────────────────── */
+
+.video-container video {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+/* ── Agent card active state ─────────────────────────────────────────────── */
+
+.agent-card.active {
+  background-color: #1a1f38;   /* surface-700 */
+  border-color: rgba(79, 110, 247, 0.5);
+}
+
+/* ── Textarea: suppress browser default resize ───────────────────────────── */
+
+#chat-input {
+  resize: none;
+  overflow: hidden;
+}
+
+/* ── Loading bounce dots ─────────────────────────────────────────────────── */
+
+@keyframes bounce-dot {
+  0%, 80%, 100% { transform: translateY(0); }
+  40%           { transform: translateY(-4px); }
+}
+
+#loading-bar .animate-bounce:nth-child(1) { animation-delay: 0ms; }
+#loading-bar .animate-bounce:nth-child(2) { animation-delay: 160ms; }
+#loading-bar .animate-bounce:nth-child(3) { animation-delay: 320ms; }
+
+/* ── Status dot animations ───────────────────────────────────────────────── */
+
+#status-dot.connected {
+  background-color: #4ade80;
+  animation: none;
+}
+
+/* ── Sidebar transition ─────────────────────────────────────────────────── */
+
+#sidebar {
+  transition: width 0.25s ease, min-width 0.25s ease;
+}
+
+/* ── Tooltip (title attribute) ─────────────────────────────────────────── */
+
+[title] {
+  cursor: help;
+}
+
+button[title] {
+  cursor: pointer;
+}
+
+/* ── Quick prompt hover effect ──────────────────────────────────────────── */
+
+.quick-prompt:hover {
+  background-color: #232845;
+  border-color: rgba(79, 110, 247, 0.4);
+  color: #fff;
+}
+
+/* ── Focus visible ring ──────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid rgba(79, 110, 247, 0.6);
+  outline-offset: 2px;
+}
+
+/* ── Welcome screen gradient text ───────────────────────────────────────── */
+
+#welcome-screen h3 {
+  background: linear-gradient(135deg, #e2e8f0 0%, #6b8eff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Video player controls dark theme ───────────────────────────────────── */
+
+video::-webkit-media-controls-panel {
+  background-color: #1a1f38;
+}
+
+/* ── Responsive: hide sidebar on very small screens ─────────────────────── */
+
+@media (max-width: 480px) {
+  #sidebar {
+    width: 100%;
+    position: fixed;
+    z-index: 40;
+    transform: translateX(-100%);
+  }
+  #sidebar.open {
+    transform: translateX(0);
+  }
+}

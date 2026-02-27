@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+# =============================================================================
+# Dynamic Video AI Agent Platform — SAM Template
+# 2026 Best-Practice PoC: LangGraph + ElevenLabs TTS + D-ID Video Avatars
+# =============================================================================
+
+Description: >
+  Dynamic Video AI Agent Platform.
+  Creates specialized AI personas on-the-fly, responds with TTS + video avatar.
+  Routes: POST /create-agent | POST /chat | GET /health
+
+# ---------------------------------------------------------------------------
+# Global defaults applied to every Lambda unless overridden
+# ---------------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 120          # D-ID polling can take up to ~60 s
+    MemorySize: 512
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        # ---- LLM ----
+        OPENAI_API_KEY:        !Ref OpenAIAPIKey
+        ANTHROPIC_API_KEY:     !Ref AnthropicAPIKey
+        LLM_PROVIDER:          !Ref LLMProvider       # "openai" | "anthropic"
+        LLM_MODEL:             !Ref LLMModel           # gpt-4o | claude-3-5-sonnet-20241022
+        # ---- ElevenLabs ----
+        ELEVENLABS_API_KEY:    !Ref ElevenLabsAPIKey
+        ELEVENLABS_VOICE_ID:   !Ref ElevenLabsVoiceID  # default stock voice
+        # ---- D-ID ----
+        DID_API_KEY:           !Ref DIDAPIKey
+        DID_PRESENTER_ID:      !Ref DIDPresenterID     # stock avatar or CUSTOM_AVATAR_ID
+        DID_DRIVER_URL:        !Ref DIDDriverURL        # optional driver video URL
+        # ---- App ----
+        LOG_LEVEL:             !Ref LogLevel
+        CORS_ORIGIN:           !Ref CORSOrigin
+    Layers:
+      - !Ref DependenciesLayer
+
+# ---------------------------------------------------------------------------
+# Parameters — override in samconfig.toml or `sam deploy --parameter-overrides`
+# ---------------------------------------------------------------------------
+Parameters:
+  OpenAIAPIKey:
+    Type: String
+    NoEcho: true
+    Default: "REPLACE_ME"
+    Description: OpenAI API key (sk-...)
+
+  AnthropicAPIKey:
+    Type: String
+    NoEcho: true
+    Default: "REPLACE_ME"
+    Description: Anthropic API key (sk-ant-...)
+
+  LLMProvider:
+    Type: String
+    Default: "openai"
+    AllowedValues: ["openai", "anthropic"]
+    Description: Which LLM provider to use
+
+  LLMModel:
+    Type: String
+    Default: "gpt-4o"
+    Description: Model name (gpt-4o, claude-3-5-sonnet-20241022, etc.)
+
+  ElevenLabsAPIKey:
+    Type: String
+    NoEcho: true
+    Default: "REPLACE_ME"
+    Description: ElevenLabs API key
+
+  ElevenLabsVoiceID:
+    Type: String
+    Default: "21m00Tcm4TlvDq8ikWAM"   # Rachel — free stock voice
+    Description: ElevenLabs voice ID for TTS
+
+  DIDAPIKey:
+    Type: String
+    NoEcho: true
+    Default: "REPLACE_ME"
+    Description: "D-ID API key (Basic <base64(email:key)> or Bearer token)"
+
+  DIDPresenterID:
+    Type: String
+    Default: "amy-jcu8MFXSuU"          # Free stock D-ID presenter
+    Description: "D-ID presenter/avatar ID. Use your CUSTOM_AVATAR_ID for your own face."
+
+  DIDDriverURL:
+    Type: String
+    Default: ""
+    Description: "(Optional) D-ID driver video URL — leave blank for auto"
+
+  LogLevel:
+    Type: String
+    Default: "INFO"
+    AllowedValues: ["DEBUG", "INFO", "WARNING", "ERROR"]
+
+  CORSOrigin:
+    Type: String
+    Default: "*"
+    Description: "CORS allowed origin (use specific domain in prod)"
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ------------------------------------------------------------------
+  # Lambda Layer — all heavy dependencies packaged separately
+  # Build with: pip install -r layers/dependencies/requirements.txt
+  #             -t layers/dependencies/python/
+  # ------------------------------------------------------------------
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "${AWS::StackName}-dependencies"
+      Description: "LangChain, LangGraph, ElevenLabs, Requests, HTTPX"
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  # ------------------------------------------------------------------
+  # API Gateway — HTTP API (lower cost + latency vs REST API)
+  # ------------------------------------------------------------------
+  VideoAgentApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Sub "${AWS::StackName}"
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref CORSOrigin
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Session-ID
+        MaxAge: 300
+
+  # ------------------------------------------------------------------
+  # Coordinator Lambda — single function, routes internally
+  # ------------------------------------------------------------------
+  CoordinatorFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-coordinator"
+      Description: "Coordinator: creates agents, handles chat, triggers TTS+video"
+      CodeUri: lambdas/coordinator/
+      Handler: app.handler
+      # Policies — add DynamoDB later when you swap in-memory → persistent
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        # Health check
+        HealthCheck:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /health
+            Method: GET
+        # Create a new specialized agent
+        CreateAgent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /create-agent
+            Method: POST
+        # Chat with an existing agent
+        Chat:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /chat
+            Method: POST
+        # Poll for async D-ID video status
+        VideoStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /video-status/{talk_id}
+            Method: GET
+        # D-ID WebRTC streaming proxy routes
+        StreamStart:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /stream/start
+            Method: POST
+        StreamSdp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /stream/sdp
+            Method: POST
+        StreamIce:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /stream/ice
+            Method: POST
+        StreamTalk:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /stream/talk
+            Method: POST
+        StreamEnd:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VideoAgentApi
+            Path: /stream/end
+            Method: DELETE
+
+  # ------------------------------------------------------------------
+  # CloudWatch Log Group — explicit so logs are cleaned up on stack delete
+  # ------------------------------------------------------------------
+  CoordinatorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CoordinatorFunction}"
+      RetentionInDays: 7
+
+# ---------------------------------------------------------------------------
+# Outputs — printed after `sam deploy`
+# ---------------------------------------------------------------------------
+Outputs:
+  ApiBaseURL:
+    Description: "HTTP API base URL — paste into frontend/.env"
+    Value: !Sub "https://${VideoAgentApi}.execute-api.${AWS::Region}.amazonaws.com/${AWS::StackName}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiBaseURL"
+
+  CoordinatorFunctionArn:
+    Description: "Coordinator Lambda ARN"
+    Value: !GetAtt CoordinatorFunction.Arn
+
+  CoordinatorFunctionName:
+    Description: "Coordinator Lambda name (for sam logs)"
+    Value: !Ref CoordinatorFunction

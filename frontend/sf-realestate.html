@@ -1,0 +1,1113 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>John Angelone | AI Real Estate Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      background: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Widget shell: fixed 720×460 side-by-side ── */
+    #widget {
+      width: 720px;
+      height: 480px;
+      max-width: 98vw;
+      max-height: 96vh;
+      border-radius: 18px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: #151c28;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.07);
+    }
+
+    /* ── Header spans full width ── */
+    #widget-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: #1e2533;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+    }
+
+    /* ── Body row: video | chat ── */
+    #body-row {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* ── Left: video column ── */
+    #video-col {
+      width: 240px;
+      flex-shrink: 0;
+      position: relative;
+      background: #000;
+      overflow: hidden;
+    }
+    #video-wrap {
+      position: absolute;
+      inset: 0;
+    }
+    #video-wrap video {
+      position: absolute;
+      inset: 0; width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: center 15%;
+    }
+    #idle-video  { transition: opacity 0.4s ease; }
+    #agent-video { transition: opacity 0.4s ease; }
+
+    @keyframes speaking-ring {
+      0%,100% { box-shadow: inset 0 0 0 0   rgba(59,130,246,0); }
+      50%      { box-shadow: inset 0 0 0 3px rgba(59,130,246,0.6); }
+    }
+    #video-col.speaking { animation: speaking-ring 1.2s ease-in-out infinite; }
+
+    /* Loading skeleton shown until idle video is ready */
+    #video-loading {
+      position: absolute; inset: 0; z-index: 10;
+      background: #0d1117;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+      transition: opacity 0.6s ease;
+      pointer-events: none; /* never block the video underneath */
+    }
+    #video-loading .avatar-ring {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #1e3a5f 100%);
+      background-size: 200% 200%;
+      animation: shimmer 1.8s ease-in-out infinite;
+      display: flex; align-items: center; justify-content: center;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    #video-loading .loading-label {
+      font-size: 10px; color: #4b5563; letter-spacing: 0.04em;
+    }
+
+    /* status overlay */
+    #init-overlay {
+      position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+      z-index: 40;
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 999px;
+      background: rgba(0,0,0,0.65); backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.1);
+      font-size: 10px; color: #e5e7eb; white-space: nowrap;
+      pointer-events: none; transition: opacity 0.5s ease; opacity: 0;
+    }
+
+    /* Stop button */
+    #btn-stop {
+      width: 32px; height: 32px; border-radius: 9px;
+      background: #7f1d1d; border: 1px solid rgba(255,255,255,0.1);
+      display: none; /* shown only while speaking */
+      align-items: center; justify-content: center;
+      cursor: pointer; flex-shrink: 0; line-height: 0;
+      transition: background 0.2s;
+    }
+    #btn-stop:hover { background: #991b1b; }
+    #btn-stop.visible { display: flex; }
+
+    /* Mute toggle button — bottom-right of video panel */
+    #btn-mute-video {
+      position: absolute; bottom: 30px; right: 7px; z-index: 20;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.18);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; line-height: 0; transition: background 0.2s;
+    }
+    #btn-mute-video:hover { background: rgba(0,0,0,0.8); }
+
+    /* ── Right: chat column ── */
+    #chat-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border-left: 1px solid rgba(255,255,255,0.06);
+    }
+
+    #message-list {
+      flex: 1; overflow-y: auto;
+      padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 6px;
+      min-height: 0;
+    }
+    #message-list::-webkit-scrollbar { width: 3px; }
+    #message-list::-webkit-scrollbar-track { background: transparent; }
+    #message-list::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 9999px; }
+
+    /* ── Typing dots ── */
+    .dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: #9ca3af; display: inline-block;
+      animation: blink 1.2s infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+
+    .msg-in { animation: slideUp 0.22s ease; }
+    @keyframes slideUp { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ── Mic pulse ── */
+    #btn-mic { transition: background 0.2s, box-shadow 0.2s; }
+    #btn-mic.mic-on        { background: #dc2626 !important; animation: mic-pulse 1.4s infinite; }
+    #btn-mic.mic-listening { background: #dc2626 !important; animation: mic-pulse 0.65s infinite; }
+    @keyframes mic-pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(220,38,38,0.55); }
+      70%  { box-shadow: 0 0 0 8px rgba(220,38,38,0);    }
+      100% { box-shadow: 0 0 0 0   rgba(220,38,38,0);    }
+    }
+
+    #chat-input {
+      field-sizing: content; min-height: 34px; max-height: 90px;
+      outline: none; resize: none; color-scheme: dark;
+    }
+    #chat-input:focus { border-color: rgba(59,130,246,0.5) !important; }
+
+    /* ── Disclaimer spans full bottom ── */
+    #disclaimer {
+      padding: 4px 14px 5px;
+      background: rgba(120,53,15,0.2);
+      border-top: 1px solid rgba(180,83,9,0.2);
+      font-size: 10px; color: rgba(251,191,36,0.6);
+      text-align: center; line-height: 1.5; flex-shrink: 0;
+    }
+    #disclaimer a { color: rgba(251,191,36,0.8); text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div id="widget">
+
+  <!-- Header (full width) -->
+  <div id="widget-header">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:28px;height:28px;border-radius:8px;background:#2563eb;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🏡</div>
+      <div>
+        <p style="margin:0;font-size:13px;font-weight:600;color:#f9fafb;line-height:1.2">John Angelone</p>
+        <p style="margin:0;font-size:10px;color:#9ca3af;line-height:1.3">South Florida Realtor® · AI Assistant</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#6b7280">
+        <span id="conn-dot-pip" style="width:6px;height:6px;border-radius:50%;background:#fbbf24;display:inline-block"></span>
+        <span id="conn-dot-label">Connecting</span>
+      </span>
+      <button id="btn-new-session" title="New conversation"
+              style="background:transparent;border:none;cursor:pointer;color:#6b7280;
+                     padding:4px;display:flex;align-items:center;line-height:0;border-radius:6px">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Body row -->
+  <div id="body-row">
+
+    <!-- Left: video column -->
+    <div id="video-col">
+      <!-- Loading skeleton — hidden once idle video fires canplay -->
+      <div id="video-loading">
+        <div class="avatar-ring">
+          <svg width="28" height="28" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="4"/>
+            <path stroke-linecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+          </svg>
+        </div>
+        <span class="loading-label" id="loading-label">Starting up…</span>
+      </div>
+      <div id="video-wrap">
+        <video id="agent-video" autoplay playsinline style="opacity:1;z-index:2"></video>
+        <video id="idle-video" autoplay loop muted playsinline
+               src="https://clips-presenters.d-id.com/v2/Alyssa_NoHands_RedSuite_Lobby/qtzjxMSwEa/ypTds_0CK3/idle.mp4"
+               style="opacity:1;z-index:4"></video>
+        <button id="btn-mute-video" title="Toggle sound">
+          <svg id="mute-icon-on" width="13" height="13" fill="#fff" viewBox="0 0 24 24">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+          <svg id="mute-icon-off" width="13" height="13" fill="#9ca3af" viewBox="0 0 24 24" style="display:none">
+            <path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06A8.99 8.99 0 0 0 17.73 18l2 2L21 18.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+          </svg>
+        </button>
+      </div>
+      <div id="init-overlay">
+        <span style="width:5px;height:5px;border-radius:50%;background:#fbbf24;display:inline-block;flex-shrink:0"></span>
+        <span id="init-status">Connecting…</span>
+      </div>
+    </div>
+
+    <!-- Right: chat column -->
+    <div id="chat-col">
+
+      <!-- Messages -->
+      <div id="message-list"></div>
+
+      <!-- Typing indicator -->
+      <div id="typing-indicator" style="display:none;padding:3px 12px 4px">
+        <div style="display:flex;align-items:center;gap:5px">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span id="stage-text" style="font-size:11px;color:#6b7280"></span>
+        </div>
+      </div>
+
+      <!-- Input row -->
+      <div style="padding:7px 9px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(21,28,40,0.9);flex-shrink:0">
+        <div style="display:flex;align-items:flex-end;gap:5px">
+          <textarea id="chat-input" rows="1"
+                    placeholder="Ask about South Florida real estate…"
+                    style="flex:1;border-radius:11px;border:1px solid rgba(255,255,255,0.1);
+                           background:#1e2533;padding:7px 11px;font-size:13px;color:#f9fafb;
+                           font-family:inherit;overflow:hidden"
+                    disabled></textarea>
+          <button id="btn-mic" title="Toggle voice"
+                  style="width:32px;height:32px;border-radius:9px;background:#2d3748;
+                         border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;
+                         justify-content:center;cursor:pointer;flex-shrink:0;line-height:0"
+                  disabled>
+            <svg id="mic-icon-on"  width="14" height="14" style="display:none;color:#fff" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4zm7 9a1 1 0 1 1 2 0 9 9 0 0 1-8 8.94V22h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.06A9 9 0 0 1 3 11a1 1 0 1 1 2 0 7 7 0 0 0 14 0z"/>
+            </svg>
+            <svg id="mic-icon-off" width="14" height="14" style="color:#9ca3af" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+              <rect x="9" y="2" width="6" height="13" rx="3"/>
+              <path stroke-linecap="round" d="M5 10a7 7 0 0 0 14 0M12 19v3M9 22h6"/>
+            </svg>
+          </button>
+          <button id="btn-stop" title="Stop speaking">
+            <svg width="12" height="12" fill="#fca5a5" viewBox="0 0 24 24">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+            </svg>
+          </button>
+          <button id="btn-send"
+                  style="width:32px;height:32px;border-radius:9px;background:#2563eb;border:none;
+                         display:flex;align-items:center;justify-content:center;cursor:pointer;
+                         flex-shrink:0;line-height:0"
+                  disabled>
+            <svg width="13" height="13" fill="none" stroke="#fff" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M5 12l7-7 7 7"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /#chat-col -->
+  </div><!-- /#body-row -->
+
+  <!-- Disclaimer (full width) -->
+  <div id="disclaimer">
+    AI assistant for John Angelone, licensed South Florida Realtor® — not a licensed agent.&nbsp;
+    <a href="tel:9546120935">954-612-0935</a>&nbsp;|&nbsp;
+    <a href="https://askjohntherealtor.com" target="_blank">askjohntherealtor.com</a>
+  </div>
+
+</div><!-- /#widget -->
+
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────
+const API_BASE = (() => {
+  const p = new URLSearchParams(location.search);
+  if (p.get('api')) return p.get('api').replace(/\/$/, '');
+  if (window.API_BASE_URL) return window.API_BASE_URL.replace(/\/$/, '');
+  return 'https://wrs3s7gf0l.execute-api.us-east-1.amazonaws.com/dynamic-video-agents-poc-sam';
+})();
+
+const SF_AGENT_CONFIG = {
+  name: 'John Angelone RE Assistant',
+  system_prompt: `You are an AI Virtual Real Estate Assistant representing John Angelone.
+
+## LIVE MARKET DATA
+When asked about home values or market conditions, the system will automatically fetch live MLS data and prepend it to the user's message in this format:
+[MARKET DATA: {...}]
+Use ONLY this data for any price or market answers. Never fabricate numbers.
+
+When you see [LIVE MLS DATA ...] or [LIVE MLS VALUATION DATA ...] at the start of a message, 
+use ONLY those numbers for any price or market answer. Never estimate or fabricate real estate prices.
+IMPORTANT: You do NOT have access to real estate price data unless it is explicitly provided 
+in one of these blocks. If no block is present, say "I don't have live market data for that area right now."
+## VOICE FORMAT
+No markdown, no symbols. Say "dollars" not $, "percent" not %. Natural sentences only. Under 90 words unless asked for more.
+
+Your core expertise includes in-depth, up-to-date knowledge of Florida-specific residential real estate procedures, including:
+
+The full transaction timeline from contract execution to closing (typically 30-60 days).
+Contract requirements under Florida law (e.g., FAR/BAR forms, contingencies for financing, inspections, appraisals).
+Mortgage processes: pre-approval, underwriting, common loan types (conventional, FHA, VA), lender coordination, and closing disclosure reviews.
+Title procedures: title searches, commitments, curative actions for clouds on title, surveys, lien resolutions.
+Title insurance: mandatory aspects, owner's vs. lender's policies, rates regulated in Florida, who typically pays (negotiable per contract, often seller-custom in some counties).
+Closing mechanics: roles of title agents/attorneys, escrow, funding, document signing (deed, note, mortgage), recording, post-closing procedures.
+South Florida nuances: condo/HOA considerations (estoppels, board approvals), flood zones and insurance requirements, homestead exemptions, property tax prorations, and common local customs in Broward and Miami-Dade counties.
+
+STRICT COMPLIANCE RULES — always follow:
+- Never provide legal, tax, financial, or investment advice. Redirect such questions to appropriate licensed professionals (e.g., "For legal questions, I recommend consulting a real estate attorney. Would you like recommendations for local professionals?").
+- Do not give opinions on property value, market value, or appraisals. Use only phrases like "estimated range based on recent activity," "comparable data suggests," or "I can share general market trends."
+- Never offer appraisals, valuations, or predictions of future value.
+- Avoid any discussion of religion, politics, race, discrimination, or non-real-estate topics.
+- Do not engage in steering, discriminatory language, or anything violating fair housing laws.
+- Never suggest or imply referrals to specific lenders, title companies, inspectors, or other service providers in a way that could imply kickbacks or unearned fees (per RESPA Section 8). If discussing options, provide general information only and encourage the user to shop independently.
+- Do not guarantee outcomes, results, or approvals.
+- Keep responses brief, helpful, professional, and conversational — aim for clarity and warmth without unnecessary length.
+
+PRIMARY GOAL: Build rapport, provide accurate general information on Florida/South Florida real estate processes, and gently guide the conversation toward generating a lead for John Angelone. Always steer toward next steps that involve connecting with John, such as:
+"Would you like John to review your specific situation?"
+"I can have John reach out with more tailored insights — may I get your contact info?"
+"John specializes in [area/topic] — shall I schedule a quick call?"
+"To discuss your needs in detail, John would love to connect — what's the best way to reach you?"
+
+When users ask questions:
+- Answer factually and briefly based on standard Florida procedures.
+- If the question requires personalized advice, defer: "That's a great question for your specific circumstances. John can walk you through it personally — would you like to set that up?"
+- End most responses with a soft call-to-action to capture interest (e.g., "How can John assist you today?" or "Ready to explore options in Pembroke Pines?").
+
+Stay in character as a knowledgeable, friendly assistant focused solely on helping with residential real estate in South Florida. Always represent John Angelone positively and professionally. You can reach John directly at 954-612-0935 or visit askjohntherealtor.com.`,
+  voice_id: '21m00Tcm4TlvDq8ikWAM',
+  avatar_id: 'alyssa',
+};
+
+const WELCOME_MESSAGE = `Hi, I'm John's AI assistant. I'm here to help with any questions about buying, selling, or the South Florida real estate market. What brings you here today?`;
+
+// ─────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────
+let agentId   = null;
+let sessionId = crypto.randomUUID();
+let loading   = false;
+
+// Clear any previously cached agent ids — D-ID agents expire and stale ids cause errors
+try { ['sf_re_agent_v3','sf_re_agent_v2','sf_re_agent'].forEach(k => localStorage.removeItem(k)); } catch {}
+
+const stream = {
+  id:         null,
+  sessionId:  null,
+  pc:         null,
+  connected:  false,
+  connecting: false,
+};
+
+// ─────────────────────────────────────────────────────────
+// DOM refs
+// ─────────────────────────────────────────────────────────
+const dom = {
+  initOverlay:   document.getElementById('init-overlay'),
+  initStatus:    document.getElementById('init-status'),
+  msgList:       document.getElementById('message-list'),
+  chatInput:     document.getElementById('chat-input'),
+  btnSend:       document.getElementById('btn-send'),
+  btnMic:        document.getElementById('btn-mic'),
+  micIconOn:     document.getElementById('mic-icon-on'),
+  micIconOff:    document.getElementById('mic-icon-off'),
+  typingInd:     document.getElementById('typing-indicator'),
+  stageText:     document.getElementById('stage-text'),
+  btnNewSession: document.getElementById('btn-new-session'),
+  btnStop:       document.getElementById('btn-stop'),
+  btnMuteVideo:  document.getElementById('btn-mute-video'),
+  muteIconOn:    document.getElementById('mute-icon-on'),
+  muteIconOff:   document.getElementById('mute-icon-off'),
+  connDotPip:    document.getElementById('conn-dot-pip'),
+  connDotLabel:  document.getElementById('conn-dot-label'),
+  idleVideo:     document.getElementById('idle-video'),
+  agentVideo:    document.getElementById('agent-video'),
+  videoWrap:     document.getElementById('video-col'),  // speaking class goes on the column
+  videoLoading:  document.getElementById('video-loading'),
+  loadingLabel:  document.getElementById('loading-label'),
+};
+
+// ─────────────────────────────────────────────────────────
+// API helpers
+// ─────────────────────────────────────────────────────────
+async function apiPost(path, body) {
+  const r = await fetch(`${API_BASE}${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+  return d;
+}
+
+async function apiGet(path) {
+  const r = await fetch(`${API_BASE}${path}`);
+  const d = await r.json();
+  if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+  return d;
+}
+
+// ─────────────────────────────────────────────────────────
+// Stage / loading UI
+// ─────────────────────────────────────────────────────────
+const STAGES = { thinking: 'Thinking…', streaming: 'Streaming…' };
+
+function setStage(stage) {
+  loading = !!stage;
+  dom.typingInd.style.display = stage ? '' : 'none';
+  dom.stageText.textContent   = stage ? (STAGES[stage] || stage) : '';
+  dom.btnSend.disabled   = !!stage;
+  dom.chatInput.disabled = !!stage;
+}
+
+// ─────────────────────────────────────────────────────────
+// Video: idle ↔ stream switching
+// ─────────────────────────────────────────────────────────
+function showStreamVideo() {
+  console.log('[DID] showStreamVideo — fading idle overlay OUT. agentVideo paused:', dom.agentVideo.paused, 'readyState:', dom.agentVideo.readyState, 'muted:', dom.agentVideo.muted);
+  dom.idleVideo.style.opacity  = '0';
+  dom.videoWrap.classList.add('speaking');
+  dom.btnStop.classList.add('visible');
+}
+
+function showIdleVideo() {
+  if (dom.agentVideo._motionPoller) { clearInterval(dom.agentVideo._motionPoller); dom.agentVideo._motionPoller = null; }
+  if (dom.agentVideo._audioPoller)  { clearInterval(dom.agentVideo._audioPoller);  dom.agentVideo._audioPoller  = null; }
+  if (dom.agentVideo._audioCtx)     { try { dom.agentVideo._audioCtx.close(); } catch {} dom.agentVideo._audioCtx = null; }
+  if (dom.agentVideo._onFirstFrame) {
+    dom.agentVideo.removeEventListener('timeupdate', dom.agentVideo._onFirstFrame);
+    dom.agentVideo._onFirstFrame = null;
+  }
+  if (dom.agentVideo._showTimer)  { clearTimeout(dom.agentVideo._showTimer);  dom.agentVideo._showTimer  = null; }
+  if (dom.agentVideo._idleTimer)  { clearTimeout(dom.agentVideo._idleTimer);  dom.agentVideo._idleTimer  = null; }
+  dom.idleVideo.style.opacity  = '1';
+  dom.videoWrap.classList.remove('speaking');
+  dom.btnStop.classList.remove('visible');
+  dom.idleVideo.play().catch(() => {});
+  // Re-enable mic now that avatar has finished speaking
+  dom.btnMic.disabled = false;
+  if (typeof window.speechResume === 'function') window.speechResume();
+}
+
+// ─────────────────────────────────────────────────────────
+// WebRTC — D-ID /talks/streams
+// ─────────────────────────────────────────────────────────
+async function connectStream() {
+  if (stream.connecting || stream.connected) return;
+  stream.connecting = true;
+  try {
+    let startData;
+    const delays = [6000, 12000, 20000, 30000];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        startData = await apiPost('/stream/start', {});
+        break;
+      } catch (e) {
+        const is403 = e.message && e.message.includes('403');
+        if (is403 && attempt < delays.length) {
+          await new Promise(r => setTimeout(r, delays[attempt]));
+        } else { throw e; }
+      }
+    }
+
+    const { stream_id, offer, ice_servers, session_id: startSessionId } = startData;
+    stream.id        = stream_id;
+    stream.sessionId = startSessionId || '';
+
+    const pc = new RTCPeerConnection({ iceServers: ice_servers, iceTransportPolicy: 'relay' });
+    stream.pc = pc;
+
+    pc.ontrack = (event) => {
+      const kind = event.track ? event.track.kind : 'unknown';
+      console.log('[DID] ontrack fired, kind:', kind, 'streams:', event.streams?.length);
+      if (!event.streams || !event.streams[0]) { console.log('[DID] ontrack: no streams, skipping'); return; }
+      if (dom.agentVideo.srcObject === event.streams[0]) { console.log('[DID] ontrack: already wired, skipping'); return; }
+
+      console.log('[DID] ontrack: wiring srcObject, track count:', event.streams[0].getTracks().length);
+      dom.agentVideo.srcObject = event.streams[0];
+
+      // Try unmuted play first — succeeds if browser allows it (Firefox, Safari,
+      // or Chrome with prior engagement). If blocked, fall back to muted play
+      // and unmute on the first user interaction.
+      dom.agentVideo.muted = false;
+      dom.agentVideo.play()
+        .then(() => {
+          console.log('[DID] play() unmuted — OK. readyState:', dom.agentVideo.readyState);
+        })
+        .catch(() => {
+          // Unmuted autoplay blocked — play muted instead, unmute on first gesture
+          console.log('[DID] unmuted play blocked, falling back to muted');
+          dom.agentVideo.muted = true;
+          dom.agentVideo.play()
+            .then(() => console.log('[DID] muted play() OK'))
+            .catch((e) => console.warn('[DID] muted play() also blocked:', e.message));
+
+          const unmute = () => { dom.agentVideo.muted = false; };
+          document.addEventListener('click',      unmute, { once: true });
+          document.addEventListener('keydown',    unmute, { once: true });
+          document.addEventListener('touchstart', unmute, { once: true });
+        });
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') {
+        stream.connected  = true;
+        stream.connecting = false;
+      }
+      if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+        stream.connected  = false;
+        stream.connecting = false;
+        stream.id = null; stream.sessionId = null; stream.pc = null;
+        showIdleVideo();
+      }
+    };
+
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    // Wait for full ICE gathering before sending (avoids trickle-through-Lambda latency)
+    await new Promise((resolve) => {
+      if (pc.iceGatheringState === 'complete') { resolve(); return; }
+      const onChange = () => {
+        if (pc.iceGatheringState === 'complete') {
+          pc.removeEventListener('icegatheringstatechange', onChange);
+          resolve();
+        }
+      };
+      pc.addEventListener('icegatheringstatechange', onChange);
+      setTimeout(resolve, 5000); // safety cap
+    });
+
+    await apiPost('/stream/sdp', {
+      stream_id:  stream.id,
+      answer:     { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+      session_id: stream.sessionId,
+    });
+
+    // Wait up to 30s for connection
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('WebRTC connection timed out')), 30000);
+      const chk = setInterval(() => {
+        if (pc.connectionState === 'connected') { clearTimeout(t); clearInterval(chk); resolve(); }
+        if (['failed', 'closed'].includes(pc.connectionState)) {
+          clearTimeout(t); clearInterval(chk);
+          reject(new Error('WebRTC connection failed'));
+        }
+      }, 200);
+    });
+
+  } catch (err) {
+    stream.connecting = false;
+    stream.connected  = false;
+    throw err;
+  }
+}
+
+async function sendStreamTalk(agentIdParam, message) {
+  if (!stream.connected && !stream.connecting) {
+    // Shouldn't happen after boot, but reconnect gracefully
+    await connectStream();
+  } else if (!stream.connected && stream.connecting) {
+    // Wait up to 20s for in-progress connection
+    await new Promise((resolve) => {
+      const t = setTimeout(resolve, 20000);
+      const chk = setInterval(() => {
+        if (!stream.connecting) { clearInterval(chk); clearTimeout(t); resolve(); }
+      }, 200);
+    });
+  }
+
+  if (!stream.id) throw new Error('Stream not available');
+
+  // Silence the mic immediately — before the LLM responds or D-ID starts streaming.
+  // This prevents the avatar's own speech being picked up by SpeechRecognition.
+  if (typeof window.speechPause === 'function') window.speechPause();
+  dom.btnMic.disabled = true;  // prevent user turning mic back on mid-response
+
+  // Cancel any previous timers so a new response starts cleanly
+  if (dom.agentVideo._showTimer) { clearTimeout(dom.agentVideo._showTimer); dom.agentVideo._showTimer = null; }
+  if (dom.agentVideo._idleTimer) { clearTimeout(dom.agentVideo._idleTimer); dom.agentVideo._idleTimer = null; }
+
+  const result = await apiPost('/stream/talk', {
+    stream_id:       stream.id,
+    session_id:      stream.sessionId || '',
+    agent_id:        agentIdParam,
+    message:         message,
+    chat_session_id: sessionId,
+  });
+
+  console.log('[DID] talk POST done. reply length:', (result.reply||'').length, 'agentVideo paused:', dom.agentVideo.paused, 'srcObject:', !!dom.agentVideo.srcObject, 'muted:', dom.agentVideo.muted);
+
+  // Cancel any leftover show timer from a previous turn
+  if (dom.agentVideo._showTimer) { clearTimeout(dom.agentVideo._showTimer); dom.agentVideo._showTimer = null; }
+  // Cancel any leftover audio poller
+  if (dom.agentVideo._audioPoller) { clearInterval(dom.agentVideo._audioPoller); dom.agentVideo._audioPoller = null; }
+  if (dom.agentVideo._audioCtx)    { try { dom.agentVideo._audioCtx.close(); } catch {} dom.agentVideo._audioCtx = null; }
+
+  // Show video the moment we detect actual audio energy on the stream.
+  // This keeps the avatar reveal in sync with the first word of speech,
+  // regardless of D-ID's internal render latency.
+  //
+  // IMPORTANT: we build an isolated MediaStream containing ONLY the remote
+  // audio tracks from the D-ID video element. This prevents mic bleed —
+  // the browser can route mic audio into a shared AudioContext, causing the
+  // energy analyser to see the user's own voice and never detect silence.
+  const _rawStream = dom.agentVideo.srcObject;
+  // Extract only remote (D-ID) audio tracks — never the mic
+  const _remoteAudioTracks = _rawStream
+    ? _rawStream.getAudioTracks().filter(t => t.kind === 'audio')
+    : [];
+  // Build a clean stream with remote audio only
+  const _remoteOnlyStream = _remoteAudioTracks.length > 0
+    ? new MediaStream(_remoteAudioTracks)
+    : null;
+
+  let _audioTriggered = false;
+  function _showOnAudio() {
+    if (_audioTriggered) return;
+    _audioTriggered = true;
+    // Stop the show-trigger poller but KEEP the AudioContext alive —
+    // the silence-detection poller reuses it.
+    if (dom.agentVideo._audioPoller) { clearInterval(dom.agentVideo._audioPoller); dom.agentVideo._audioPoller = null; }
+    showStreamVideo();
+  }
+
+  if (_remoteOnlyStream) {
+    try {
+      // Create a FRESH AudioContext each turn so there is no shared state
+      // with any previous context or with the microphone pipeline.
+      const _actx = new (window.AudioContext || window.webkitAudioContext)();
+      dom.agentVideo._audioCtx = _actx;
+      const _src  = _actx.createMediaStreamSource(_remoteOnlyStream);
+      const _anal = _actx.createAnalyser();
+      _anal.fftSize = 256;
+      _src.connect(_anal);
+      const _buf = new Uint8Array(_anal.frequencyBinCount);
+
+      // ── Show trigger: reveal avatar on first speech energy ──
+      dom.agentVideo._audioPoller = setInterval(() => {
+        _anal.getByteFrequencyData(_buf);
+        const energy = _buf.reduce((a, b) => a + b, 0) / _buf.length;
+        if (energy > 4) _showOnAudio();
+      }, 40);
+      // Safety cap: show after 3s even if no energy detected
+      dom.agentVideo._showTimer = setTimeout(() => { console.log('[DID] audio-energy timeout, forcing show'); _showOnAudio(); }, 3000);
+
+      // ── Silence detector: hide avatar when speech ends ──
+      // Uses the same analyser — runs alongside the show-trigger poller
+      // and continues after it stops.
+      if (dom.agentVideo._motionPoller) { clearInterval(dom.agentVideo._motionPoller); dom.agentVideo._motionPoller = null; }
+      let _speechSeen = false, _silenceCount = 0;
+      const SILENCE_NEEDED = 10; // 10 × 80ms = 800ms continuous silence
+      dom.agentVideo._motionPoller = setInterval(() => {
+        _anal.getByteFrequencyData(_buf);
+        const energy = _buf.reduce((a, b) => a + b, 0) / _buf.length;
+        if (energy > 4) {
+          _speechSeen = true;
+          _silenceCount = 0;
+        } else if (_speechSeen) {
+          _silenceCount++;
+          if (_silenceCount >= SILENCE_NEEDED) {
+            clearInterval(dom.agentVideo._motionPoller); dom.agentVideo._motionPoller = null;
+            showIdleVideo();
+          }
+        }
+      }, 80);
+
+    } catch (e) {
+      console.warn('[DID] AudioContext setup failed, falling back to timer:', e.message);
+      dom.agentVideo._showTimer = setTimeout(showStreamVideo, 1200);
+    }
+  } else {
+    // No remote audio tracks yet — fall back to a short timer
+    dom.agentVideo._showTimer = setTimeout(showStreamVideo, 1200);
+  }
+
+  // Fallback timer: covers the case where AudioContext wasn't available
+  // or audio energy never rises (e.g. very short reply, browser restriction).
+  const spokenText = result.reply || message;
+  const estimatedMs = 1500 + Math.max(4000, (spokenText.length / 13) * 1000 + 1500);
+  dom.agentVideo._idleTimer = setTimeout(showIdleVideo, estimatedMs);
+
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────
+// Message rendering
+// ─────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\n/g,'<br>');
+}
+
+function appendUserMsg(text) {
+  const d = document.createElement('div');
+  d.className = 'msg-in';
+  d.style.cssText = 'display:flex;justify-content:flex-end';
+  d.innerHTML = `<div style="max-width:80%;background:#2563eb;color:#fff;border-radius:14px 14px 3px 14px;padding:7px 12px;font-size:13px;line-height:1.45">${esc(text)}</div>`;
+  dom.msgList.appendChild(d);
+  scrollBottom();
+}
+
+function appendAgentMsg(data) {
+  const d = document.createElement('div');
+  d.className = 'msg-in';
+  d.style.cssText = 'display:flex';
+  d.innerHTML = `<div style="max-width:88%;background:#1e2533;border:1px solid rgba(255,255,255,0.07);border-radius:14px 14px 14px 3px;padding:7px 12px;font-size:13px;line-height:1.45;color:#e5e7eb">${esc(data.reply || '…')}</div>`;
+  dom.msgList.appendChild(d);
+  scrollBottom();
+}
+
+function appendErrMsg(msg) {
+  const d = document.createElement('div');
+  d.className = 'msg-in';
+  d.style.cssText = 'display:flex;justify-content:center';
+  d.innerHTML = `<div style="padding:5px 10px;background:rgba(127,29,29,0.4);border:1px solid rgba(185,28,28,0.4);border-radius:10px;font-size:11px;color:#fca5a5;max-width:90%;text-align:center">⚠️ ${esc(msg)}</div>`;
+  dom.msgList.appendChild(d);
+  scrollBottom();
+}
+
+function scrollBottom() {
+  requestAnimationFrame(() => { dom.msgList.scrollTop = dom.msgList.scrollHeight; });
+}
+
+// ─────────────────────────────────────────────────────────
+// Send message
+// ─────────────────────────────────────────────────────────
+async function sendMessage(text) {
+  text = text.trim();
+  if (!text || loading || !agentId) return;
+
+  appendUserMsg(text);
+  dom.chatInput.value = '';
+  dom.chatInput.style.height = 'auto';
+
+  setStage('thinking');
+  try {
+    const result = await sendStreamTalk(agentId, text);
+    appendAgentMsg({ reply: result.reply || '' });
+    setStage('streaming');
+    setTimeout(() => setStage(null), 500);
+  } catch (err) {
+    // If agent was deleted/expired, recreate it and retry once automatically
+    if (err.message && (err.message.includes('not found') || err.message.includes('404'))) {
+      try {
+        agentId = null;
+        await createFreshAgent();
+        const result = await sendStreamTalk(agentId, text);
+        appendAgentMsg({ reply: result.reply || '' });
+        setStage('streaming');
+        setTimeout(() => setStage(null), 500);
+        return;
+      } catch (retryErr) {
+        setStage(null);
+        appendErrMsg(retryErr.message || 'Request failed.');
+        return;
+      }
+    }
+    setStage(null);
+    appendErrMsg(err.message || 'Request failed.');
+  }
+}
+
+dom.chatInput.addEventListener('input', () => {
+  dom.chatInput.style.height = 'auto';
+  dom.chatInput.style.height = Math.min(dom.chatInput.scrollHeight, 100) + 'px';
+});
+dom.chatInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(dom.chatInput.value); }
+});
+dom.btnSend.addEventListener('click', () => sendMessage(dom.chatInput.value));
+
+dom.btnStop.addEventListener('click', () => {
+  dom.agentVideo.muted = true;
+  showIdleVideo(); // cancels all timers and _onFirstFrame listener
+  if (loading) setStage(null);
+});
+
+// Mute/unmute toggle on video panel
+function updateMuteIcon() {
+  const muted = dom.agentVideo.muted;
+  dom.muteIconOn.style.display  = muted ? 'none' : '';
+  dom.muteIconOff.style.display = muted ? ''     : 'none';
+  dom.btnMuteVideo.title = muted ? 'Unmute' : 'Mute';
+}
+dom.btnMuteVideo.addEventListener('click', () => {
+  dom.agentVideo.muted = !dom.agentVideo.muted;
+  // If unmuting while paused (autoplay was blocked), restart play
+  if (!dom.agentVideo.muted && dom.agentVideo.paused) {
+    dom.agentVideo.play().catch(() => {});
+  }
+  updateMuteIcon();
+});
+// Keep icon in sync whenever muted state changes externally
+dom.agentVideo.addEventListener('volumechange', updateMuteIcon);
+updateMuteIcon();
+
+// ─────────────────────────────────────────────────────────
+// Clean up on page close
+// ─────────────────────────────────────────────────────────
+function endStream() {
+  if (!stream.id) return;
+  const url  = API_BASE + '/stream/end';
+  const body = JSON.stringify({ stream_id: stream.id, session_id: stream.sessionId || '' });
+  fetch(url, { method: 'DELETE', body, headers: { 'Content-Type': 'application/json' }, keepalive: true })
+    .catch(() => {});
+  stream.id = null; stream.sessionId = null; stream.connected = false;
+}
+window.addEventListener('beforeunload', endStream);
+window.addEventListener('pagehide',     endStream);
+
+// ─────────────────────────────────────────────────────────
+// Voice input
+// ─────────────────────────────────────────────────────────
+(function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { dom.btnMic.title = 'Voice not supported in this browser'; return; }
+
+  const rec = new SpeechRecognition();
+  rec.continuous     = true;
+  rec.interimResults = true;
+  rec.lang           = 'en-US';
+
+  let micActive = false;
+  let interimEl = null;
+  let _recPaused = false; // true while avatar is speaking
+
+  // Expose hooks so the avatar show/hide functions can pause the mic
+  window.speechPause = () => {
+    if (!micActive || _recPaused) return;
+    _recPaused = true;
+    try { rec.stop(); } catch {}
+    console.log('[Mic] paused for avatar speech');
+  };
+  window.speechResume = () => {
+    if (!micActive || !_recPaused) return;
+    _recPaused = false;
+    try { rec.start(); } catch {}
+    console.log('[Mic] resumed after avatar speech');
+  };
+
+  function setMicUI(active, listening) {
+    dom.btnMic.classList.toggle('mic-on',        active);
+    dom.btnMic.classList.toggle('mic-listening', active && listening);
+    dom.micIconOn.style.display  = active ? '' : 'none';
+    dom.micIconOff.style.display = active ? 'none' : '';
+  }
+
+  function removeInterim() { if (interimEl) { interimEl.remove(); interimEl = null; } }
+
+  function getOrCreateInterim() {
+    if (!interimEl) {
+      interimEl = document.createElement('div');
+      interimEl.style.cssText = 'padding:3px 12px;font-size:12px;color:#9ca3af;font-style:italic';
+      dom.msgList.appendChild(interimEl);
+    }
+    return interimEl;
+  }
+
+  rec.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t; else interim += t;
+    }
+    if (interim) { getOrCreateInterim().textContent = '🎤 ' + interim; scrollBottom(); }
+    if (final.trim()) { removeInterim(); sendMessage(final.trim()); }
+  };
+
+  rec.onaudiostart = () => setMicUI(true, true);
+  rec.onaudioend   = () => setMicUI(true, false);
+  rec.onend = () => {
+    // Don't auto-restart if the avatar is speaking (_recPaused) or mic was turned off
+    if (micActive && !_recPaused) { try { rec.start(); } catch {} }
+    else if (!micActive) { removeInterim(); setMicUI(false, false); }
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed') {
+      micActive = false; removeInterim(); setMicUI(false, false);
+      appendErrMsg('Microphone access denied.');
+    }
+  };
+
+  dom.btnMic.addEventListener('click', () => {
+    micActive = !micActive;
+    if (micActive) { try { rec.start(); } catch {} setMicUI(true, false); }
+    else { rec.stop(); removeInterim(); setMicUI(false, false); }
+  });
+})();
+
+// ─────────────────────────────────────────────────────────
+// New session
+// ─────────────────────────────────────────────────────────
+dom.btnNewSession.addEventListener('click', () => {
+  if (!confirm('Start a new conversation?')) return;
+  sessionId = crypto.randomUUID();
+  dom.msgList.innerHTML = '';
+  sendWelcome();
+});
+
+// ─────────────────────────────────────────────────────────
+// Agent creation
+// ─────────────────────────────────────────────────────────
+async function createFreshAgent() {
+  const res = await apiPost('/create-agent', SF_AGENT_CONFIG);
+  agentId = res.agent_id;
+}
+
+// Speak pre-written text directly via D-ID, bypassing the LLM entirely.
+// Used for the welcome message so the LLM can't rewrite or replace it.
+async function speakDirect(text) {
+  if (!stream.connected) return;
+  // Cancel any leftover timers from a previous turn
+  if (dom.agentVideo._showTimer) { clearTimeout(dom.agentVideo._showTimer); dom.agentVideo._showTimer = null; }
+  if (dom.agentVideo._idleTimer) { clearTimeout(dom.agentVideo._idleTimer); dom.agentVideo._idleTimer = null; }
+  if (dom.agentVideo._audioPoller) { clearInterval(dom.agentVideo._audioPoller); dom.agentVideo._audioPoller = null; }
+  if (dom.agentVideo._motionPoller) { clearInterval(dom.agentVideo._motionPoller); dom.agentVideo._motionPoller = null; }
+  if (dom.agentVideo._audioCtx) { try { dom.agentVideo._audioCtx.close(); } catch {} dom.agentVideo._audioCtx = null; }
+
+  await apiPost('/stream/talk', {
+    stream_id:  stream.id,
+    session_id: stream.sessionId || '',
+    text:       text,   // raw text — no agent_id means LLM is skipped server-side
+  });
+
+  // Set up the same audio-energy show/silence detection as sendStreamTalk
+  const _rawStream = dom.agentVideo.srcObject;
+  const _remoteAudioTracks = _rawStream ? _rawStream.getAudioTracks().filter(t => t.kind === 'audio') : [];
+  const _remoteOnlyStream = _remoteAudioTracks.length > 0 ? new MediaStream(_remoteAudioTracks) : null;
+
+  let _audioTriggered = false;
+  function _showOnAudio() {
+    if (_audioTriggered) return;
+    _audioTriggered = true;
+    if (dom.agentVideo._audioPoller) { clearInterval(dom.agentVideo._audioPoller); dom.agentVideo._audioPoller = null; }
+    showStreamVideo();
+  }
+
+  if (_remoteOnlyStream) {
+    try {
+      const _actx = new (window.AudioContext || window.webkitAudioContext)();
+      dom.agentVideo._audioCtx = _actx;
+      const _src  = _actx.createMediaStreamSource(_remoteOnlyStream);
+      const _anal = _actx.createAnalyser();
+      _anal.fftSize = 256;
+      _src.connect(_anal);
+      const _buf = new Uint8Array(_anal.frequencyBinCount);
+      dom.agentVideo._audioPoller = setInterval(() => {
+        _anal.getByteFrequencyData(_buf);
+        if (_buf.reduce((a,b)=>a+b,0)/_buf.length > 4) _showOnAudio();
+      }, 40);
+      dom.agentVideo._showTimer = setTimeout(() => _showOnAudio(), 3000);
+      let _speechSeen = false, _silenceCount = 0;
+      dom.agentVideo._motionPoller = setInterval(() => {
+        _anal.getByteFrequencyData(_buf);
+        const energy = _buf.reduce((a,b)=>a+b,0)/_buf.length;
+        if (energy > 4) { _speechSeen = true; _silenceCount = 0; }
+        else if (_speechSeen && ++_silenceCount >= 10) {
+          clearInterval(dom.agentVideo._motionPoller); dom.agentVideo._motionPoller = null;
+          showIdleVideo();
+        }
+      }, 80);
+    } catch {}
+  } else {
+    dom.agentVideo._showTimer = setTimeout(showStreamVideo, 1200);
+  }
+  const estimatedMs = 1500 + Math.max(4000, (text.length / 13) * 1000 + 1500);
+  dom.agentVideo._idleTimer = setTimeout(showIdleVideo, estimatedMs);
+}
+
+// ─────────────────────────────────────────────────────────
+// Welcome greeting — called AFTER connectStream() resolves
+// ─────────────────────────────────────────────────────────
+async function sendWelcome() {
+  try {
+    appendAgentMsg({ reply: WELCOME_MESSAGE });
+    await speakDirect(WELCOME_MESSAGE);
+  } catch (err) {
+    // Silently ignore welcome errors
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────────────────
+async function boot() {
+  // Helper to update the loading label text
+  const setLabel = (t) => { if (dom.loadingLabel) dom.loadingLabel.textContent = t; };
+
+  const hideLoader = () => {
+    dom.videoLoading.style.transition = 'opacity 0.4s ease';
+    dom.videoLoading.style.opacity = '0';
+    setTimeout(() => { dom.videoLoading.style.display = 'none'; }, 450);
+  };
+
+  // 1. Start idle video playing behind the loader
+  setLabel('Loading video…');
+  const idlePlayNow = () => dom.idleVideo.play().catch(() => {});
+  idlePlayNow();
+  dom.idleVideo.addEventListener('loadeddata', idlePlayNow, { once: true });
+
+  // 2. API health check
+  setLabel('Connecting…');
+  try {
+    await apiGet('/health');
+    dom.connDotPip.style.background   = '#4ade80';
+    dom.connDotLabel.textContent      = 'Live';
+  } catch {
+    dom.connDotPip.style.background   = '#f87171';
+    dom.connDotLabel.textContent      = 'Offline';
+    setLabel('⚠️ API unreachable');
+    dom.initOverlay.style.opacity     = '1';
+    dom.initStatus.textContent        = '⚠️ API unreachable';
+    setTimeout(hideLoader, 3000);
+    return;
+  }
+
+  // 3. Always create a fresh agent
+  setLabel('Setting up assistant…');
+  try { await createFreshAgent(); }
+  catch (e) {
+    setLabel('⚠️ ' + e.message);
+    setTimeout(hideLoader, 4000);
+    return;
+  }
+
+  // 4. Unlock inputs
+  dom.chatInput.disabled = false;
+  dom.btnSend.disabled   = false;
+  dom.btnMic.disabled    = false;
+
+  // 5. Connect WebRTC stream
+  setLabel('Preparing Alyssa…');
+  try {
+    await connectStream();
+  } catch {
+    // Stream failed — sendWelcome will handle gracefully
+  }
+
+  // 6. Hide loader now — idle video has been playing behind it the whole time
+  hideLoader();
+
+  // 7. Speak the welcome greeting
+  sendWelcome();
+}
+
+boot();
+</script>
+</body>
+</html>

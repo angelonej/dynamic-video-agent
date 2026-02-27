@@ -1,0 +1,105 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "dynamic-video-agents-poc-sam"
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+      "${workspaceFolder}/sam-app/lambdas/coordinator",
+      "${workspaceFolder}/sam-app/layers/dependencies/python"
+    ],
+    "editor.formatOnSave": true,
+    "editor.rulers": [100],
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/*.pyc": true,
+      ".aws-sam": true
+    },
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[html]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "yaml.schemas": {
+      "https://raw.githubusercontent.com/aws/serverless-application-model/main/samtranslator/schema/schema.json": "**/template.yaml"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "amazonwebservices.aws-toolkit-vscode",
+      "ms-python.python",
+      "ms-python.black-formatter",
+      "esbenp.prettier-vscode",
+      "bradlc.vscode-tailwindcss",
+      "redhat.vscode-yaml",
+      "ms-vscode.live-server"
+    ]
+  },
+  "launch": {
+    "configurations": [
+      {
+        "name": "Python: Coordinator Lambda (debug)",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/sam-app/lambdas/coordinator/app.py",
+        "console": "integratedTerminal",
+        "env": {
+          "LLM_PROVIDER": "openai",
+          "LLM_MODEL": "gpt-4o",
+          "LOG_LEVEL": "DEBUG"
+        }
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "SAM: Build",
+        "type": "shell",
+        "command": "sam build",
+        "options": { "cwd": "${workspaceFolder}/sam-app" },
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "SAM: Local API (port 3001)",
+        "type": "shell",
+        "command": "sam local start-api --env-vars env.json --port 3001 --warm-containers EAGER",
+        "options": { "cwd": "${workspaceFolder}/sam-app" },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Frontend: Serve (port 5500)",
+        "type": "shell",
+        "command": "python -m http.server 5500",
+        "options": { "cwd": "${workspaceFolder}/frontend" },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Install Layer Dependencies",
+        "type": "shell",
+        "command": "pip install -r layers/dependencies/requirements.txt -t layers/dependencies/python/",
+        "options": { "cwd": "${workspaceFolder}/sam-app" },
+        "problemMatcher": []
+      },
+      {
+        "label": "SAM: Deploy",
+        "type": "shell",
+        "command": "sam build ; sam deploy",
+        "options": { "cwd": "${workspaceFolder}/sam-app" },
+        "group": "build",
+        "problemMatcher": []
+      }
+    ]
+  }
+}
